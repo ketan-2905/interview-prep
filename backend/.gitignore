@@ -1,0 +1,86 @@
+# -------------------------
+# Python
+# -------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# -------------------------
+# Virtual environments
+# -------------------------
+.venv/
+venv/
+env/
+ENV/
+.ENV/
+.virtualenv/
+
+# -------------------------
+# Environment variables / secrets
+# -------------------------
+.env
+.env.*
+*.env
+
+# -------------------------
+# Django / Flask / FastAPI
+# -------------------------
+*.log
+local_settings.py
+instance/
+db.sqlite3
+*.sqlite3
+
+# -------------------------
+# Migrations & cache
+# -------------------------
+*.pyc
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# -------------------------
+# IDEs & editors
+# -------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# -------------------------
+# OS files
+# -------------------------
+.DS_Store
+Thumbs.db
+
+# -------------------------
+# Build & distribution
+# -------------------------
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# -------------------------
+# Jupyter / notebooks
+# -------------------------
+.ipynb_checkpoints/
+
+# -------------------------
+# Logs
+# -------------------------
+logs/
+*.log
+
+# -------------------------
+# Docker
+# -------------------------
+docker-compose.override.yml
