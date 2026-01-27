@@ -1,0 +1,30 @@
+fastapi==0.128.0
+uvicorn==0.40.0
+starlette==0.50.0
+
+# Database
+prisma==0.15.0
+
+# Validation & typing
+pydantic==2.12.5
+typing-extensions==4.15.0
+
+# Environment variables
+python-dotenv==1.2.1
+
+# WebSockets
+websockets==11.0
+
+# HTTP / async utils
+aiohttp==3.13.3
+anyio==4.12.1
+
+# LLM (Groq)
+groq==1.0.0
+
+# Audio / TTS / STT support
+soundfile==0.13.1
+numpy==2.4.1
+
+# Standard helpers
+requests==2.32.5

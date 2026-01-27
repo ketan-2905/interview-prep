@@ -1,15 +1,11 @@
 "use client";
-import { useState } from "react";
 import { motion } from "framer-motion";
 import { Mic, Zap, Shield, Cpu, ArrowRight, Play } from "lucide-react";
-import AuthModal from "@/components/Models/AuthModal";
+import Link from "next/link";
 
 export default function LandingPage() {
-  const [isAuthOpen, setIsAuthOpen] = useState(false);
-
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 selection:bg-emerald-500/30">
-      <AuthModal isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} />
 
       {/* Navigation */}
       <nav className="fixed top-0 z-40 w-full border-b border-white/5 bg-slate-950/50 backdrop-blur-xl">
@@ -20,19 +16,19 @@ export default function LandingPage() {
             </div>
             <span>InterAI</span>
           </div>
-          <button 
-            onClick={() => setIsAuthOpen(true)}
+          <Link
+            href="/login"
             className="rounded-full bg-white/5 px-6 py-2 text-sm font-medium text-white border border-white/10 hover:bg-white/10 transition-all"
           >
             Login
-          </button>
+          </Link>
         </div>
       </nav>
 
       {/* Hero Section */}
       <section className="relative overflow-hidden pt-32 pb-20 px-6">
         <div className="absolute top-0 left-1/2 -z-10 h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-emerald-500/10 blur-[120px]" />
-        
+
         <div className="mx-auto max-w-4xl text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -45,8 +41,8 @@ export default function LandingPage() {
             </span>
             Real-time WebSocket Interviews
           </motion.div>
-          
-          <motion.h1 
+
+          <motion.h1
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
@@ -55,8 +51,8 @@ export default function LandingPage() {
             Master your next <br />
             <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">Technical Interview</span>
           </motion.h1>
-          
-          <motion.p 
+
+          <motion.p
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
@@ -65,18 +61,18 @@ export default function LandingPage() {
             Connect with our high-fidelity AI agents over low-latency WebSockets. Practice coding, architecture, and soft skills in a realistic live-call environment.
           </motion.p>
 
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
             className="flex flex-col sm:flex-row items-center justify-center gap-4"
           >
-            <button 
-              onClick={() => setIsAuthOpen(true)}
+            <Link
+              href="/login"
               className="group flex h-14 items-center gap-2 rounded-full bg-emerald-500 px-8 text-lg font-semibold text-slate-950 transition-all hover:bg-emerald-400"
             >
               Start Free Session <ArrowRight size={20} className="transition-transform group-hover:translate-x-1" />
-            </button>
+            </Link>
             <button className="flex h-14 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-8 text-lg font-semibold text-white hover:bg-white/10">
               <Play size={18} /> Watch Demo
             </button>
@@ -88,17 +84,17 @@ export default function LandingPage() {
       <section className="py-24 px-6 bg-slate-900/50">
         <div className="mx-auto max-w-7xl">
           <div className="grid md:grid-cols-3 gap-8">
-            <FeatureCard 
+            <FeatureCard
               icon={<Cpu className="text-emerald-400" />}
               title="Tailored Agents"
               desc="Input your job description and our AI allocates a specialized space with custom interview logic."
             />
-            <FeatureCard 
+            <FeatureCard
               icon={<Mic className="text-cyan-400" />}
               title="Voice-First Experience"
               desc="Tap to call. Our WebSocket architecture ensures zero-lag, human-like voice interaction."
             />
-            <FeatureCard 
+            <FeatureCard
               icon={<Shield className="text-purple-400" />}
               title="Detailed Feedback"
               desc="Get a comprehensive report on your performance, tone, and technical accuracy after every call."
