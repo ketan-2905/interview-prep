@@ -199,7 +199,8 @@ async def interview_ws(ws: WebSocket, interview_id: str):
                 "type": "ai_response", 
                 "text": reply, 
                 "reading_time": SESSIONS[sid]["reading_time"],
-                "is_final": is_final
+                "is_final": is_final,
+                "time_left": int(timeLeft) #changes here
             })
         except: pass
         

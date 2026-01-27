@@ -1,11 +1,13 @@
 "use client";
 
-import { useSession } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Mic, Clock, BarChart, User as UserIcon, Calendar, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import axios from "axios";
 import clsx from "clsx";
+import { usePassStore } from "@/store/useFeatureGrantStore";
+import FeatureGrant from "@/components/Models/FeatureGrant";
 
 interface Interview {
     id: string;
@@ -25,6 +27,7 @@ export default function Dashboard() {
     const [loading, setLoading] = useState(true);
     const [submitLoading, setSubmitLoading] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
+    const {allowed,setopen} = usePassStore()
 
     // Form State
     const [formData, setFormData] = useState({
@@ -129,8 +132,15 @@ export default function Dashboard() {
                         alt="Profile"
                         className="w-10 h-10 rounded-full border border-slate-700"
                     />
+                    <button
+                    onClick={() => signOut()}                    
+                    className="bg-red-500 text-white p-2 rounded-md cursor-pointer">
+                        LogOut
+                    </button>
                 </div>
             </header>
+
+            <FeatureGrant />
 
             {!isCreating ? (
                 <div className="max-w-6xl mx-auto">
@@ -139,14 +149,21 @@ export default function Dashboard() {
                             <h2 className="text-2xl font-semibold mb-2">Your Interviews</h2>
                             <p className="text-slate-400">Track your progress and review feedback.</p>
                         </div>
-                        <button
+                        {allowed ? (<button
                             onClick={() => setIsCreating(true)}
                             className="group relative px-6 py-3 bg-emerald-500 hover:bg-emerald-600 rounded-xl transition-all hover:scale-105 shadow-lg shadow-emerald-900/20"
                         >
                             <span className="font-bold flex items-center gap-2">
                                 <Mic className="w-5 h-5" /> New Interview
                             </span>
-                        </button>
+                        </button>):(<button
+                            onClick={() => setopen(true)}
+                            className="group relative px-6 py-3 bg-emerald-500 hover:bg-emerald-600 rounded-xl transition-all hover:scale-105 shadow-lg shadow-emerald-900/20"
+                        >
+                            <span className="font-bold flex items-center gap-2">
+                                <Mic className="w-5 h-5" /> Authorised Feature
+                            </span>
+                        </button>)}
                     </div>
 
                     {loading ? (
