@@ -3,7 +3,10 @@ uvicorn==0.40.0
 starlette==0.50.0
 
 # Database
-prisma==0.15.0
+SQLAlchemy==2.0.46 
+asyncpg==0.31.0 
+greenlet==3.3.1 
+cuid2==2.0.1
 
 # Validation & typing
 pydantic==2.12.5

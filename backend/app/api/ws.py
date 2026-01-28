@@ -6,12 +6,14 @@ import websockets
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from dotenv import load_dotenv
 from datetime import datetime, timezone
+from sqlalchemy import select, desc
 
 from app.services.session import SESSIONS
 from app.services.llm import ask_llm
 from app.services.tts import stream_inworld_tts_to_client
 from app.services.feedback import generate_feedback
-from app.core.db import db
+from app.core.database import AsyncSessionLocal
+from app.models import Interview, Question
 
 load_dotenv()
 
@@ -31,57 +33,60 @@ async def interview_ws(ws: WebSocket, interview_id: str):
     await ws.accept()
     
     # Check if interview exists and is actually playable
-    interview = await db.interview.find_unique(where={"id": interview_id})
-    if not interview:
-        await ws.close(code=4004, reason="Interview not found")
-        return
-    
-    if interview.status == "COMPLETED":
-        await ws.close(code=4000, reason="Interview already completed")
-        return
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(Interview).where(Interview.id == interview_id))
+        interview = result.scalars().first()
+        
+        if not interview:
+            await ws.close(code=4004, reason="Interview not found")
+            return
+        
+        if interview.status == "COMPLETED":
+            await ws.close(code=4000, reason="Interview already completed")
+            return
 
-    # Update StartTime if first run
-    if not interview.startTime:
-        await db.interview.update(
-            where={"id": interview_id},
-            data={"startTime": datetime.now(timezone.utc), "status": "IN_PROGRESS"}
-        )
-        interview = await db.interview.find_unique(where={"id": interview_id}) # Refresh
+        # Update StartTime if first run
+        if not interview.startTime:
+            interview.startTime = datetime.now(timezone.utc)
+            interview.status = "IN_PROGRESS"
+            await db.commit()
+            await db.refresh(interview)
 
-    # Configs
-    SILENCE_FINAL_SEC = interview.silenceTime or 3.0
-    DURATION_SEC = (interview.duration or 15) * 60
-    
+        # Configs from interview object (need to capture values before session closes or use eager load)
+        # Primitives are safe to keep after session close if object is detached, but better to copy vars.
+        SILENCE_FINAL_SEC = interview.silenceTime or 3.0
+        DURATION_SEC = (interview.duration or 15) * 60
+        start_time_utc = interview.startTime.replace(tzinfo=timezone.utc) if interview.startTime.tzinfo else interview.startTime.replace(tzinfo=timezone.utc) # Helper if naive
+        
+        interview_topic = interview.topic
+        interview_seniority = interview.seniority
+        interview_difficulty = interview.difficulty
+        interview_concept = interview.concept
+
     # Calculate initial elapsed time
-    start_time_utc = interview.startTime.replace(tzinfo=timezone.utc)
     
-    SYSTEM_PROMPT = f"""You are an AI technical interviewer conducting a {interview.seniority or 'Mid-Level'} interview about {interview.topic}.
-    Difficulty: {interview.difficulty}.
+    SYSTEM_PROMPT = f"""You are an AI technical interviewer conducting a {interview_seniority or 'Mid-Level'} interview about {interview_topic}.
+    Difficulty: {interview_difficulty}.
     """
-    if interview.concept:
-        SYSTEM_PROMPT += f"\nFocus specifically on checking knowledge of: {interview.concept}."
+    if interview_concept:
+        SYSTEM_PROMPT += f"\nFocus specifically on checking knowledge of: {interview_concept}."
 
     SYSTEM_PROMPT += """
     \nRules:
     - Ask exactly ONE question at a time.
     - Keep questions short.
     - Never teach, hint, explain, or correct.
-- Explore different concepts within the domain; do not stay on one topic.
-- You may ask at most ONE follow-up question based on the previous answer.
-- Do not ask multiple follow-ups on the same concept.
-- If the candidate struggles, switch to a simpler or adjacent concept without explanation.
-- Keep questions concise and neutral.
+    - Explore different concepts within the domain; do not stay on one topic.
+    - You may ask at most ONE follow-up question based on the previous answer.
+    - Do not ask multiple follow-ups on the same concept.
+    - If the candidate struggles, switch to a simpler or adjacent concept without explanation.
+    - Keep questions concise and neutral.
     """
 
-    # FIRST_QUESTION = f"Hello. I'm your AI interviewer. Let's start with a question about {interview.topic}."
-    # if interview.concept:
-    #     FIRST_QUESTION += f" specifically regarding {interview.concept}."
-    # FIRST_QUESTION += " Can you explain it simply?"
-
-    FIRST_QUESTION = f"Hello. I'm your AI interviewer. Let's start with a interview about {interview.topic}."
+    FIRST_QUESTION = f"Hello. I'm your AI interviewer. Let's start with a interview about {interview_topic}."
     
-    if interview.concept:
-        FIRST_QUESTION += f" We may touch on concepts related to {interview.concept}."
+    if interview_concept:
+        FIRST_QUESTION += f" We may touch on concepts related to {interview_concept}."
     FIRST_QUESTION += " Let’s begin. Please briefly introduce yourself."
 
 
@@ -97,18 +102,22 @@ async def interview_ws(ws: WebSocket, interview_id: str):
     }
 
     # Check if we are resuming (questions exist per DB)
-    questions_count = await db.question.count(where={"interviewId": interview_id})
-    is_resuming = questions_count > 0
+    async with AsyncSessionLocal() as db:
+        q_count = await db.execute(select(Question).where(Question.interviewId == interview_id)) # This returns rows, count via len or func.count
+        # Better:
+        from sqlalchemy import func
+        result = await db.execute(select(func.count(Question.id)).where(Question.interviewId == interview_id))
+        questions_count = result.scalar()
+        is_resuming = questions_count > 0
 
-    if not is_resuming:
-        await db.question.create(data={
-            "interviewId": interview_id,
-            "question": FIRST_QUESTION
-        })
-        SESSIONS[sid]["history"].append({"role": "assistant", "content": FIRST_QUESTION})
-    else:
-        # Load history context from DB if sophisticated (omitted for speed, assumes fresh session usually)
-        pass
+        if not is_resuming:
+            new_q = Question(interviewId=interview_id, question=FIRST_QUESTION)
+            db.add(new_q)
+            await db.commit()
+            SESSIONS[sid]["history"].append({"role": "assistant", "content": FIRST_QUESTION})
+        else:
+            # Load history context from DB if sophisticated (omitted for speed, assumes fresh session usually)
+            pass
 
     async def run_tts_task(text, sid_local):
         try:
@@ -137,12 +146,17 @@ async def interview_ws(ws: WebSocket, interview_id: str):
         
         # Save User Answer to DB (Update last question)
         if user_text:
-            last_q = await db.question.find_first(
-                where={"interviewId": interview_id},
-                order={"createdAt": "desc"}
-            )
-            if last_q:
-                await db.question.update(where={"id": last_q.id}, data={"userAnswer": user_text})
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(Question)
+                    .where(Question.interviewId == interview_id)
+                    .order_by(desc(Question.createdAt))
+                    .limit(1)
+                )
+                last_q = result.scalars().first()
+                if last_q:
+                    last_q.userAnswer = user_text
+                    await db.commit()
             
             SESSIONS[sid]["history"].append({"role": "user", "content": user_text})
 
@@ -176,17 +190,21 @@ async def interview_ws(ws: WebSocket, interview_id: str):
         SESSIONS[sid]["history"].append({"role": "assistant", "content": reply})
 
         # Save AI Question if NOT final (or even if final, to record the closing statement)
-        await db.question.create(data={
-            "interviewId": interview_id,
-            "question": reply
-        })
+        async with AsyncSessionLocal() as db:
+            db.add(Question(interviewId=interview_id, question=reply))
+            if is_final:
+                # Mark DB as completed NOW
+                # We need to fetch interview again to attach or just update by ID logic (but sqlalchemy needs obj or explicit update)
+                # Explicit update:
+                from sqlalchemy import update
+                await db.execute(
+                    update(Interview)
+                    .where(Interview.id == interview_id)
+                    .values(status="COMPLETED", endTime=datetime.now(timezone.utc))
+                )
+            await db.commit()
 
         if is_final:
-             # Mark DB as completed NOW
-             await db.interview.update(
-                 where={"id": interview_id}, 
-                 data={"status": "COMPLETED", "endTime": datetime.now(timezone.utc)}
-             )
              # Trigger feedback generation immediately
              asyncio.create_task(generate_feedback(interview_id))
 
@@ -200,7 +218,7 @@ async def interview_ws(ws: WebSocket, interview_id: str):
                 "text": reply, 
                 "reading_time": SESSIONS[sid]["reading_time"],
                 "is_final": is_final,
-                "time_left": int(timeLeft) #changes here
+                "time_left": int(timeLeft)
             })
         except: pass
         
@@ -272,10 +290,15 @@ async def interview_ws(ws: WebSocket, interview_id: str):
                     # Force termination if time completely runs out (margin of 5s)
                     if elapsed_check >= DURATION_SEC + 5:
                          # Force close properly
-                         await db.interview.update(
-                            where={"id": interview_id}, 
-                            data={"status": "COMPLETED", "endTime": now_utc}
-                         )
+                         async with AsyncSessionLocal() as db:
+                             from sqlalchemy import update
+                             await db.execute(
+                                 update(Interview)
+                                 .where(Interview.id == interview_id)
+                                 .values(status="COMPLETED", endTime=now_utc)
+                             )
+                             await db.commit()
+                         
                          asyncio.create_task(generate_feedback(interview_id))
                          try: await ws.send_json({"type": "ai_response", "text": "Time is up.", "is_final": True})
                          except: pass
@@ -299,18 +322,18 @@ async def interview_ws(ws: WebSocket, interview_id: str):
             if sid in SESSIONS and SESSIONS[sid].get("buffer"):
                 final_text = " ".join(SESSIONS[sid]["buffer"]).strip()
                 if final_text:
-                    last_q = await db.question.find_first(
-                        where={"interviewId": interview_id},
-                        order={"createdAt": "desc"}
-                    )
-                    # If the last question exists and doesn't have an answer (or we append?)
-                    # If we follow process_ai logic, we just overwrite/set it.
-                    if last_q:
-                        new_ans = (last_q.userAnswer + " " + final_text) if last_q.userAnswer else final_text
-                        await db.question.update(
-                            where={"id": last_q.id},
-                            data={"userAnswer": new_ans}
+                    async with AsyncSessionLocal() as db:
+                        result = await db.execute(
+                            select(Question)
+                            .where(Question.interviewId == interview_id)
+                            .order_by(desc(Question.createdAt))
+                            .limit(1)
                         )
+                        last_q = result.scalars().first()
+                        if last_q:
+                            new_ans = (last_q.userAnswer + " " + final_text) if last_q.userAnswer else final_text
+                            last_q.userAnswer = new_ans
+                            await db.commit()
         except Exception as e:
             print(f"Error flushing buffer: {e}")
 
@@ -318,19 +341,16 @@ async def interview_ws(ws: WebSocket, interview_id: str):
         if sid in SESSIONS: del SESSIONS[sid]
 
         # 3. FAST TERMINATION: Mark as COMPLETED immediately if not already
-        # This ensures that if the user disconnects/closes tab, the dashboard shows COMPLETED instantly
-        # and doesn't wait for the LLM generation (which can take 10s).
         try:
-             # We can't easily check current DB status here without a query, 
-             # but blind update is generally safe if we want to force close.
-             # Or check if we have a flag? 
-             # Let's just update. "endTime" will be the disconnect time.
-             await db.interview.update(
-                where={"id": interview_id},
-                data={"status": "COMPLETED", "endTime": datetime.now(timezone.utc)}
-             )
+             async with AsyncSessionLocal() as db:
+                 from sqlalchemy import update
+                 await db.execute(
+                     update(Interview)
+                     .where(Interview.id == interview_id)
+                     .values(status="COMPLETED", endTime=datetime.now(timezone.utc))
+                 )
+                 await db.commit()
         except Exception as e:
-             # Ignore if already completed or error
              pass
 
         # 4. Trigger Feedback Generation

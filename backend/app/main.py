@@ -1,15 +1,20 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.core.db import db
+from app.core.database import engine, Base
 from app.api import ws, interview
+
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await db.connect()
+    # Optional: Ensure tables exist (helpful if running on a fresh DB, 
+    # but user says schema is present). 
+    # We can leave this uncommented or commented depending on preference.
+    # async with engine.begin() as conn:
+    #     await conn.run_sync(Base.metadata.create_all)
     yield
-    await db.disconnect()
+    await engine.dispose()
 
 app = FastAPI(title="Interview AI Backend", lifespan=lifespan)
 
