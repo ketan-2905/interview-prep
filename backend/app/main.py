@@ -1,8 +1,13 @@
 from contextlib import asynccontextmanager
+import os #New import
+from pathlib import Path #New import
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.db import db
 from app.api import ws, interview
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+os.environ["PRISMA_PYTHON_ENGINE_BINARY"] = "1" #Added for render depolyment
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
