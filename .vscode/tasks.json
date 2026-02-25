@@ -1,0 +1,25 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Backend",
+      "type": "shell",
+      "command": "cd backend && source .venv/Scripts/activate && uvicorn main:app --reload",
+      "presentation": {
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Frontend",
+      "type": "shell",
+      "command": "cd frontend && npm run dev",
+      "presentation": {
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Start All",
+      "dependsOn": ["Backend", "Frontend"]
+    }
+  ]
+}
